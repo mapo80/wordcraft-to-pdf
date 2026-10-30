@@ -405,7 +405,7 @@ wordcraft-to-pdf/
 | Platform | Runner |
 |---|---|
 | linux-x64 / linux-arm64 | `ubuntu-latest` / `ubuntu-24.04-arm` (bookworm container) |
-| osx-arm64 / osx-x64 | `macos-14` / `macos-15-intel` |
+| osx-arm64 / osx-x64 | `macos-15` / `macos-15-intel` |
 | win-x64 / win-arm64 | `windows-2022` / `windows-11-arm` |
 
 To cut a release: bump `version` in `Cargo.toml`, `java/pom.xml` and the .NET projects if
