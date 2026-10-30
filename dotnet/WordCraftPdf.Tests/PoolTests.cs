@@ -707,7 +707,8 @@ public class ArgumentValidationTests
 
         var missing = await converter.ConvertAsync("/no/such/file.docx", "/tmp/out.pdf");
         Assert.Equal(WordCraftPdfErrorCode.FileNotFound, missing.ErrorCode);
-        Assert.Contains("/no/such/file.docx", missing.ErrorMessage);
+        // The converter reports the full path (D:\no\such\file.docx on Windows).
+        Assert.Contains(Path.GetFullPath("/no/such/file.docx"), missing.ErrorMessage);
 
         var missingToStream = await converter.ConvertAsync("/no/such/file.docx", new MemoryStream());
         Assert.Equal(WordCraftPdfErrorCode.FileNotFound, missingToStream.ErrorCode);

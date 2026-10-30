@@ -97,10 +97,13 @@ class WorkerLocatorTest {
         assertTrue(f.getParentFile().getParentFile().getName().endsWith("-" + sha256(content).substring(0, 16)),
                 f.getParentFile().getParentFile().getName());
 
-        Set<PosixFilePermission> perms = Files.getPosixFilePermissions(f.toPath());
-        assertFalse(perms.contains(PosixFilePermission.OTHERS_WRITE));
-        assertFalse(perms.contains(PosixFilePermission.GROUP_WRITE));
-        assertFalse(Files.getPosixFilePermissions(tmp.resolve("cache")).contains(PosixFilePermission.OTHERS_WRITE));
+        // Permission bits exist only on POSIX file systems (not NTFS).
+        if (Files.getFileStore(f.toPath()).supportsFileAttributeView("posix")) {
+            Set<PosixFilePermission> perms = Files.getPosixFilePermissions(f.toPath());
+            assertFalse(perms.contains(PosixFilePermission.OTHERS_WRITE));
+            assertFalse(perms.contains(PosixFilePermission.GROUP_WRITE));
+            assertFalse(Files.getPosixFilePermissions(tmp.resolve("cache")).contains(PosixFilePermission.OTHERS_WRITE));
+        }
 
         long modified = f.lastModified();
         Thread.sleep(20);
