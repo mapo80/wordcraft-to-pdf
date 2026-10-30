@@ -401,12 +401,23 @@ public class IntegrationIsolationTests
     {
         SkipIfUnavailable();
         await using var converter = await PdfConverter.CreateAsync(new PdfConverterOptions { MaxWorkers = 1, WarmUp = true });
-        var pid = converter.Pool.Workers.Single().ProcessId;
-
         converter.Pool.ConversionTimeout = TimeSpan.FromMilliseconds(1);
-        var timedOut = await converter.ConvertAsync(BigMarkdown(4000), DocumentFormat.Markdown);
-        Assert.False(timedOut.Success);
-        Assert.Equal(WordCraftPdfErrorCode.Timeout, timedOut.ErrorCode);
+        // Timer resolution is coarse on some platforms (~15 ms on Windows) and a fast machine can
+        // beat it: grow the document until a conversion outlasts the timeout.
+        ConversionResult<byte[]>? timedOut = null;
+        int pid = 0;
+        foreach (var paragraphs in new[] { 4000, 20000, 80000 })
+        {
+            pid = converter.Pool.Workers.Single().ProcessId;
+            var result = await converter.ConvertAsync(BigMarkdown(paragraphs), DocumentFormat.Markdown);
+            if (!result.Success)
+            {
+                timedOut = result;
+                break;
+            }
+        }
+        Assert.NotNull(timedOut);
+        Assert.Equal(WordCraftPdfErrorCode.Timeout, timedOut!.ErrorCode);
         Assert.True(await WaitUntilAsync(() => !IsProcessRunning(pid), TimeSpan.FromSeconds(5)));
 
         converter.Pool.ConversionTimeout = TimeSpan.FromMinutes(2);

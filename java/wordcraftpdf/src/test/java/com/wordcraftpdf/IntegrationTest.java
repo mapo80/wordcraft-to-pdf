@@ -384,8 +384,9 @@ class IntegrationTest {
         }
         try (PdfConverter c = PdfConverter.create(options().maxWorkers(1)
                 .conversionTimeout(1, TimeUnit.MILLISECONDS).build())) {
-            // Start-up is not counted in the conversion timeout; 1 ms is too short for any conversion.
-            assertEquals(WordCraftPdfErrorCode.TIMEOUT, c.convert(small, DocumentFormat.DOCX).getErrorCode());
+            // Start-up is not counted in the conversion timeout. The big document (over a second)
+            // can't finish within 1 ms even where timers are coarse (~15 ms on Windows).
+            assertEquals(WordCraftPdfErrorCode.TIMEOUT, c.convert(big, DocumentFormat.TEXT).getErrorCode());
         }
     }
 
