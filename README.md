@@ -14,7 +14,7 @@ executable per platform, built from WordCraft's source at a pinned release tag.
 |---|---|
 | **Platforms** | Linux x64/arm64 · macOS arm64/x64 · Windows x64/ARM64 |
 | **Formats in** | DOCX (DOCM, DOTX, DOTM) · DOC · ODT · RTF · HTML · Markdown · TXT |
-| **Speed** | ~2–5 ms for a 1–2 page document, ~20–50 ms for 14–28 pages, ~100 conversions/s per worker (Apple M-series, warm) |
+| **Speed** | ~1–4 ms for a 1–2 page document, ~20–28 ms for 14–28 pages, ~110 conversions/s per worker — 6–33× faster than LibreOffice-based [SlimLO](#comparison-with-slimlo-libreoffice) |
 | **Worker** | one ~70 MB executable, fonts for CJK/Arabic/Thai/Hebrew… embedded; no runtime dependencies beyond the C library |
 | **WordCraft** | `v0.12.0` (see [`WORDCRAFT_VERSION`](WORDCRAFT_VERSION)) |
 
@@ -96,17 +96,72 @@ executable per platform, built from WordCraft's source at a pinned release tag.
 - **Build:** fat LTO, one codegen unit, `mimalloc` as the worker's allocator (measured +9–17 %
   throughput and tighter tail latency than the system allocator on the test documents).
 
-Measured on the test fixtures (macOS, Apple Silicon, one warm worker, buffer mode, from
-[`tests/worker_smoke.py`](tests/worker_smoke.py)):
+Measured with release **v0.1.0** (`osx-arm64`) on an Apple Silicon Mac: one worker, buffer
+mode, the 7 documents in [`tests/fixtures`](tests/fixtures), 20 rounds, two runs:
 
-| Document | Pages | p50 |
+| Metric | Value |
+|---|---|
+| Worker start → `ready` (fonts, warm-up included) | 22–43 ms |
+| First conversion after start | 1–2 ms |
+| Throughput, one worker | ~110 conversions/s, ~750 pages/s |
+| Peak memory per worker | ~142 MB |
+| Runtime on disk (`osx-arm64`) | 69 MB, one file |
+
+| Document | Pages | Median |
 |---|---|---|
-| barcode_font.docx | 1 | 2.6 ms |
-| rich_formatting.docx | 2 | 4–6 ms |
-| unicode_text.docx (CJK, Arabic, Hebrew, Thai) | 1 | 4.5 ms |
-| stress_test.docx | 14 | 21 ms |
-| large_document.docx | 28 | ~50 ms |
-| **All fixtures** | | **~105 conversions/s, ~700 pages/s per worker** |
+| barcode_font.docx | 1 | 0.7 ms |
+| missing_fonts.docx | 1 | 2.0 ms |
+| rich_formatting.docx | 2 | 2.4 ms |
+| unicode_text.docx (CJK, Arabic, Hebrew, Thai) | 1 | 4.1 ms |
+| multi_font.docx | 1 | 4.2 ms |
+| stress_test.docx | 14 | 20 ms |
+| large_document.docx | 28 | 28 ms |
+
+---
+
+## Comparison with SlimLO (LibreOffice)
+
+[SlimLO](https://github.com/mapo80/libreoffice-to-pdf) does the same job with a stripped-down
+LibreOffice, behind the same worker protocol and the same SDK shape, so the two can be measured
+like for like. Both published releases — WordCraftPdf **v0.1.0** and SlimLO **v0.1.10** — on the
+same Apple Silicon Mac, `osx-arm64`, one worker each, buffer mode, the same 7 documents and font
+folder, 20 rounds, two alternating runs (within 3 % of each other):
+
+| | WordCraftPdf | SlimLO | |
+|---|---|---|---|
+| Worker start → `ready` | 22–43 ms | ~235 ms | ~7× faster |
+| First conversion after start | 1–2 ms | ~240 ms | WordCraftPdf warms up during `init` |
+| Throughput, one worker | ~110 conversions/s | ~15 conversions/s | ~7× |
+| Peak memory per worker | ~142 MB | ~190 MB | −26 % |
+| Runtime on disk | 69 MB, 1 file | 114 MB, 295 files | −40 % |
+
+| Document | WordCraftPdf | SlimLO | Speed-up |
+|---|---|---|---|
+| barcode_font.docx | 0.7 ms | 23 ms | 33× |
+| missing_fonts.docx | 2.0 ms | 34 ms | 17× |
+| rich_formatting.docx | 2.4 ms | 30 ms | 12× |
+| unicode_text.docx | 4.1 ms | 36 ms | 9× |
+| multi_font.docx | 4.2 ms | 31 ms | 7× |
+| stress_test.docx | 20 ms | 117 ms | 6× |
+| large_document.docx | 28 ms | 169 ms | 6× |
+
+**Output is not identical.** Page counts match on five documents; on two they differ:
+`large_document` gives 28 pages (SlimLO 23) and `rich_formatting` 2 (SlimLO 1). These fixtures
+are generated without a styles part, and their headings reference a `Heading1` style the
+document never defines while setting their look directly (Arial, bold, 24 pt). The OOXML
+specification says a reference to a missing style applies no style — SlimLO follows it (black
+headings); WordCraft falls back to its built-in heading look (blue, extra space above and below),
+which adds the pages. Real Word documents always carry their styles part, so this affects them far
+less, but it is a WordCraft divergence. On layout fidelity in general LibreOffice is the more
+mature engine; compare on your own documents before switching.
+
+What the numbers don't cover: file-path mode, other platforms, and several workers in parallel
+(both SDKs scale out with one process per worker; WordCraftPdf's lighter workers fit more per
+host). Reproduce with:
+
+```bash
+./scripts/compare-slimlo.sh          # macOS; downloads both releases, ROUNDS=20 RUNS=2 by default
+```
 
 ---
 
