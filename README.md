@@ -356,16 +356,6 @@ output/
 └── build-metadata.json             # WordCraft tag + commit, craft-fonts commit, target, sizes
 ```
 
-### Docker (Linux)
-
-```bash
-./scripts/docker-build.sh                       # build in a container, extract to output-linux-<arch>/
-PLATFORM=linux/amd64 ./scripts/linux-docker-validate.sh   # build + gate inside a container
-```
-
-The runtime image needs nothing beyond glibc; it optionally adds the metric-compatible fonts
-above (`INSTALL_FONTS=1`, default).
-
 ### Updating WordCraft
 
 ```bash
@@ -400,9 +390,8 @@ wordcraft-to-pdf/
 ├── dotnet/                        # .NET SDK, native-asset packages, tests
 ├── java/                          # Java SDK, tests, example
 ├── patches/                       # modifications to vanilla WordCraft (none today)
-├── scripts/                       # build, patch, bump, gate, docker, packaging
+├── scripts/                       # build, patch, bump, gate, packaging
 ├── tests/                         # fixtures, C API test, worker protocol/throughput test
-├── docker/                        # Linux build/runtime/gate images
 └── docs/protocol.md               # worker protocol
 ```
 
@@ -410,7 +399,7 @@ wordcraft-to-pdf/
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| [`build.yml`](.github/workflows/build.yml) | push / PR to `main`, manual | native build + gate on 6 platforms (Linux in a Debian bookworm container for glibc 2.36 compatibility), .NET and Java test suites on all 6 against the fresh workers, Linux Docker validation; uploads `native-<rid>` artifacts and gate reports |
+| [`build.yml`](.github/workflows/build.yml) | push / PR to `main`, manual | native build + gate on 6 platforms (Linux in a Debian bookworm container for glibc 2.36 compatibility), .NET and Java test suites on all 6 against the fresh workers; uploads `native-<rid>` artifacts and gate reports |
 | [`release.yml`](.github/workflows/release.yml) | tag `v*.*.*`, manual (version input) | runs the build, then creates the GitHub Release with the NuGet packages, the Maven JAR (all platforms) with sources/javadoc/POM, per-platform native archives and `SHA256SUMS`; publishes to nuget.org / Maven Central only when their secrets are set |
 
 | Platform | Runner |

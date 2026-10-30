@@ -45,7 +45,7 @@ jobs:
         # build could not. To cross-compile instead, use
         #   { rid: win-arm64, os: windows-2022, target: aarch64-pc-windows-msvc, msvc-arch: amd64_arm64 }
         #
-        # Linux builds run in a Debian bookworm container (glibc 2.36, like docker/Dockerfile.linux)
+        # Linux builds run in a Debian bookworm container (glibc 2.36)
         # so the worker also runs on older distributions than the runner's Ubuntu 24.04.
         include:
           - { rid: linux-x64,   os: ubuntu-latest,    container: 'rust:1.95-bookworm', target: '', exe: '' }
@@ -159,21 +159,6 @@ jobs:
           path: output/
           if-no-files-found: error
           retention-days: 30
-
-  linux-docker:
-    name: Linux Docker image (linux-x64)
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-
-      # Builds docker/Dockerfile.linux, extracts its artifacts and runs the gate inside the
-      # runtime-like image; checks the published container image path, not only the binaries.
-      - name: Build and validate
-        env:
-          PLATFORM: linux/amd64
-          GATE_ITERATIONS: "5"
-        run: bash scripts/linux-docker-validate.sh
 
   dotnet:
     name: .NET tests (${{ matrix.rid }})

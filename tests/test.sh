@@ -106,9 +106,11 @@ if [ "$PLATFORM" = "windows" ]; then
     [ -n "$CC" ] || { echo "ERROR: no C compiler (cl, gcc or clang) in PATH"; exit 1; }
     case "$(basename "$CC")" in
         cl|cl.exe)
-            # Dash-style switches: Git Bash would rewrite /nologo-style ones as paths.
-            (cd "$TEST_OUT" && "$CC" -nologo -W3 -O2 -D_CRT_SECURE_NO_WARNINGS -I"$INC" "$SRC" \
-                "$(native_path "$WCPDF_DIR/lib/wcpdf.lib")" -Fe"$(native_path "$TEST_BIN")")
+            # Dash-style switches: Git Bash would rewrite /nologo-style ones as paths. Every path
+            # is already Windows-style (native_path), so turn MSYS argument conversion off: it
+            # mangles -FeD:/a/... into D:A:\... . The output name is relative to TEST_OUT.
+            (cd "$TEST_OUT" && MSYS2_ARG_CONV_EXCL='*' "$CC" -nologo -W3 -O2 -D_CRT_SECURE_NO_WARNINGS \
+                -I"$INC" "$SRC" "$(native_path "$WCPDF_DIR/lib/wcpdf.lib")" -Fetest_convert.exe)
             ;;
         *)
             "$CC" -std=c11 -O2 -Wall -D__USE_MINGW_ANSI_STDIO=1 -o "$TEST_BIN" "$SRC" -I"$INC" \
