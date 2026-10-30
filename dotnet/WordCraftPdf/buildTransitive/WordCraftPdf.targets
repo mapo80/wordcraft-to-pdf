@@ -1,0 +1,16 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    The wcpdf_worker executable ships in the WordCraftPdf.NativeAssets.{Platform} packages, under
+    runtimes/<rid>/native/. NuGet copies it to the output (runtimes/<rid>/native/ for portable
+    apps, the application directory for RID-specific builds), and each platform package's
+    .targets restores the execute bit that NuGet drops on Unix.
+
+    Install the package for your target platform:
+      dotnet add package WordCraftPdf.NativeAssets.Linux
+      dotnet add package WordCraftPdf.NativeAssets.macOS
+      dotnet add package WordCraftPdf.NativeAssets.Windows
+
+    Or point PdfConverterOptions.WorkerPath / the WCPDF_WORKER_PATH environment variable at a
+    wcpdf_worker you built yourself.
+  -->
+</Project>

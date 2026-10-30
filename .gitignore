@@ -1,0 +1,36 @@
+# WordCraft source (cloned at build time by scripts/build.sh)
+wc-src
+craft-fonts-src/
+
+# Generated from wc-src/Cargo.lock at build time, so the engine builds with the versions
+# WordCraft tested at the pinned tag
+Cargo.lock
+
+# Build output
+target/
+output/
+output-*/
+
+# .NET build artifacts
+dotnet/**/bin/
+dotnet/**/obj/
+dotnet/nupkgs/
+
+# Java build artifacts
+java/**/target/
+*.class
+
+# Test artifacts (generated)
+tests/output/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Gate reports (CI and local runs)
+gate-report/

@@ -1,0 +1,133 @@
+# syntax=docker/dockerfile:1
+#
+# Dockerfile.linux — build WordCraftPdf for Linux (the image's architecture: amd64 or arm64)
+# and package a minimal runtime image.
+#
+# Stages:
+#   builder    rust (Debian bookworm, glibc 2.36): scripts/build.sh -> /artifacts
+#   artifacts  scratch, only the build output (for `--output type=local`)
+#   gate       runtime base + cc + python3: runs scripts/run-gate.sh against /opt/wcpdf
+#   runtime    (default) Debian slim + /opt/wcpdf/{bin,lib,include,licenses}
+#
+# Build the runtime image:
+#   docker build -f docker/Dockerfile.linux -t wordcraftpdf .
+# Extract the build output (same layout as scripts/build.sh's output/):
+#   docker build -f docker/Dockerfile.linux --target artifacts --output type=local,dest=output-linux .
+# Run the release gate in a runtime-like container:
+#   docker build -f docker/Dockerfile.linux --target gate -t wordcraftpdf-gate . && docker run --rm wordcraftpdf-gate
+# Another architecture (QEMU / a native builder):
+#   docker buildx build --platform linux/arm64 -f docker/Dockerfile.linux ...
+# Use the worker (docs/protocol.md over stdin/stdout):
+#   docker run -i --rm wordcraftpdf
+#
+# Runtime dependencies: none beyond glibc (libc, libm, libgcc_s; ldd is checked by the gate).
+# The engine embeds Latin faces (Source Sans/Serif, Inter, JetBrains Mono) and, with
+# WITH_CRAFT_FONTS=1, CJK/Arabic/Hebrew/Thai/Devanagari faces, so it renders with no fonts
+# installed and needs no fontconfig: it scans /usr/share/fonts directly. INSTALL_FONTS=1 (default)
+# adds the metric-compatible substitutes for Office fonts (Carlito = Calibri, Caladea = Cambria,
+# Liberation = Arial / Times New Roman / Courier New) so line breaks and page counts match Word.
+# Mount more fonts under /usr/share/fonts or pass them with init's font_paths.
+
+ARG RUST_IMAGE=rust:1.95-slim-bookworm
+ARG RUNTIME_IMAGE=debian:bookworm-slim
+
+# ============================================================
+# Stage 1: build
+# ============================================================
+FROM ${RUST_IMAGE} AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates gcc libc6-dev make \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+# Only what the build reads: editing tests/, docs/ or the SDKs doesn't invalidate this stage.
+COPY Cargo.toml WORDCRAFT_VERSION ./
+COPY scripts/ scripts/
+COPY patches/ patches/
+COPY native/ native/
+
+ARG NPROC=""
+ARG WITH_CRAFT_FONTS=1
+# Commit of this repository, recorded in build-metadata.json (.git isn't copied in).
+ARG WCPDF_COMMIT=""
+ARG TARGETPLATFORM
+
+# target/ and the craft-fonts checkout are cached between builds (per platform); WordCraft is
+# cloned fresh at the pinned tag every time so a version bump can never build stale sources.
+RUN --mount=type=cache,id=wcpdf-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=wcpdf-cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=wcpdf-target-${TARGETPLATFORM},target=/src/target \
+    --mount=type=cache,id=wcpdf-craft-fonts,target=/src/craft-fonts-src \
+    set -eux; \
+    chmod +x scripts/*.sh; \
+    OUTPUT_DIR=/artifacts NPROC="${NPROC:-$(nproc)}" WITH_CRAFT_FONTS="$WITH_CRAFT_FONTS" ./scripts/build.sh; \
+    if [ -n "$WCPDF_COMMIT" ]; then \
+        sed -i "s/\"wordcraftpdf_commit\": \"[^\"]*\"/\"wordcraftpdf_commit\": \"$WCPDF_COMMIT\"/" /artifacts/build-metadata.json; \
+    fi; \
+    echo "--- dynamic dependencies"; \
+    ldd /artifacts/bin/wcpdf_worker; \
+    ldd /artifacts/lib/libwcpdf.so; \
+    if ldd /artifacts/bin/wcpdf_worker /artifacts/lib/libwcpdf.so | grep -q 'not found'; then exit 1; fi
+
+# ============================================================
+# Stage 2: build output only (docker build --target artifacts --output type=local,dest=DIR)
+# ============================================================
+FROM scratch AS artifacts
+COPY --from=builder /artifacts/ /
+
+# ============================================================
+# Stage 3: runtime base
+# ============================================================
+FROM ${RUNTIME_IMAGE} AS runtime-base
+
+ARG INSTALL_FONTS=1
+RUN set -eux; \
+    if [ "$INSTALL_FONTS" = "1" ]; then \
+        apt-get update; \
+        apt-get install -y --no-install-recommends \
+            fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation2 fonts-dejavu-core; \
+        rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# The static library isn't needed at runtime.
+COPY --from=builder /artifacts/bin/ /opt/wcpdf/bin/
+COPY --from=builder /artifacts/lib/libwcpdf.so /opt/wcpdf/lib/
+COPY --from=builder /artifacts/include/ /opt/wcpdf/include/
+COPY --from=builder /artifacts/licenses/ /opt/wcpdf/licenses/
+COPY --from=builder /artifacts/build-metadata.json /opt/wcpdf/
+
+ENV PATH=/opt/wcpdf/bin:$PATH \
+    WCPDF_WORKER_PATH=/opt/wcpdf/bin/wcpdf_worker \
+    WCPDF_NATIVE_DIR=/opt/wcpdf
+
+# ============================================================
+# Stage 4: release gate inside a runtime-like container
+# ============================================================
+FROM runtime-base AS gate
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY WORDCRAFT_VERSION ./
+COPY scripts/run-gate.sh scripts/
+COPY tests/ tests/
+RUN chmod +x scripts/run-gate.sh tests/test.sh && rm -rf tests/output
+
+ENV GATE_ENABLE_DOTNET=0 \
+    GATE_ENABLE_JAVA=0 \
+    GATE_REPORT_DIR=/reports
+CMD ["/src/scripts/run-gate.sh", "/opt/wcpdf"]
+
+# ============================================================
+# Stage 5: runtime (default target)
+# ============================================================
+FROM runtime-base AS runtime
+
+RUN useradd --system --uid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin wcpdf
+USER wcpdf
+WORKDIR /tmp
+# Speaks docs/protocol.md on stdin/stdout: docker run -i --rm wordcraftpdf
+ENTRYPOINT ["/opt/wcpdf/bin/wcpdf_worker"]

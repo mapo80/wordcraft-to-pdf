@@ -1,0 +1,14 @@
+# Build context for docker/Dockerfile.linux (BuildKit reads <Dockerfile>.dockerignore).
+# The Dockerfile COPYs only Cargo.toml, WORDCRAFT_VERSION, scripts/, patches/, native/, tests/;
+# keep everything large or generated out of the context.
+.git
+target
+output
+output-*
+wc-src
+craft-fonts-src
+Cargo.lock
+tests/output
+dotnet
+java
+**/.DS_Store

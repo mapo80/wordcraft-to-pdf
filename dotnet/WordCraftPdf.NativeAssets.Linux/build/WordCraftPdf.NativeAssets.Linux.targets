@@ -1,0 +1,27 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    NuGet copies runtimes/<rid>/native/wcpdf_worker to the output (runtimes/<rid>/native/ for
+    portable apps, the application directory for RID-specific builds) but does not preserve the
+    file's execute bit. Restore it after Build and Publish. (WordCraftPdf also restores it at
+    run time when it can, e.g. when the output folder is copied elsewhere afterwards.)
+  -->
+  <Target Name="_WordCraftPdfSetExecuteBit_Linux" AfterTargets="Build"
+          Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <ItemGroup>
+      <_WcpdfWorkerOut_Linux Include="$(OutDir)runtimes/linux-x64/native/wcpdf_worker;$(OutDir)runtimes/linux-arm64/native/wcpdf_worker;$(OutDir)wcpdf_worker" />
+    </ItemGroup>
+    <Exec Command="chmod a+x &quot;%(_WcpdfWorkerOut_Linux.FullPath)&quot;"
+          Condition="Exists('%(_WcpdfWorkerOut_Linux.FullPath)')"
+          ContinueOnError="true" StandardOutputImportance="low" />
+  </Target>
+
+  <Target Name="_WordCraftPdfSetExecuteBitOnPublish_Linux" AfterTargets="Publish"
+          Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <ItemGroup>
+      <_WcpdfWorkerPub_Linux Include="$(PublishDir)runtimes/linux-x64/native/wcpdf_worker;$(PublishDir)runtimes/linux-arm64/native/wcpdf_worker;$(PublishDir)wcpdf_worker" />
+    </ItemGroup>
+    <Exec Command="chmod a+x &quot;%(_WcpdfWorkerPub_Linux.FullPath)&quot;"
+          Condition="Exists('%(_WcpdfWorkerPub_Linux.FullPath)')"
+          ContinueOnError="true" StandardOutputImportance="low" />
+  </Target>
+</Project>

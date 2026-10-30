@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Missing XML comments are not worth a warning on internal plumbing. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <IsTrimmable Condition="'$(TargetFramework)' == 'net8.0'">true</IsTrimmable>
+    <IsAotCompatible Condition="'$(TargetFramework)' == 'net8.0'">true</IsAotCompatible>
+
+    <!-- Package metadata -->
+    <PackageId>WordCraftPdf</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>mapo80</Authors>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/mapo80/wordcraft-to-pdf</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/mapo80/wordcraft-to-pdf</PackageProjectUrl>
+    <Description>Managed .NET library for DOCX/DOC/ODT/RTF/HTML/Markdown/text to PDF conversion with the WordCraft engine (pure Rust). Thread-safe async API with process isolation: conversions run in a pool of persistent native worker processes, so a crash or hang in the engine never affects your application. Supports file-path, byte-buffer and stream conversion with structured font diagnostics. Targets netstandard2.0 and net8.0. Requires a platform-specific WordCraftPdf.NativeAssets package (Linux, macOS or Windows).</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageTags>pdf;conversion;docx;doc;odt;rtf;wordcraft</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Polyfill packages for .NET Standard 2.0 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- Allow the test project to access internal types -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="WordCraftPdf.Tests" />
+  </ItemGroup>
+
+  <!-- Ship MSBuild .targets to consumers -->
+  <ItemGroup>
+    <None Include="build\WordCraftPdf.targets" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\WordCraftPdf.targets" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

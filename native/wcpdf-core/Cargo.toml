@@ -1,0 +1,21 @@
+[package]
+name = "wcpdf-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "WordCraftPdf core: word-processing documents to PDF through the WordCraft engine"
+
+[lints]
+workspace = true
+
+[dependencies]
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wordcraft-doc = { workspace = true }
+wordcraft-engine = { workspace = true }
+wordcraft-fonts = { workspace = true }
+wordcraft-layout = { workspace = true }
+wordcraft-pdf = { workspace = true }

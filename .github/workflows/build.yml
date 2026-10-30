@@ -1,0 +1,273 @@
+# Builds the native artifacts (worker + C API) on every supported platform, runs the release
+# gate on each, then runs the .NET and Java SDK test suites against the freshly built workers.
+#
+# Also called by release.yml (workflow_call), so a release ships exactly what this pipeline
+# builds and tests.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per PR / ref; a new push to a pull request cancels the superseded run.
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  RUST_TOOLCHAIN: "1.95"
+  JAVA_VERSION: "21"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  native:
+    name: Native (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # target: a Rust triple to cross-compile for ('' = native build on the runner). The gate
+        # only runs for native builds.
+        #
+        # win-arm64 builds natively on the GitHub-hosted Windows 11 Arm64 runner rather than
+        # cross-compiling on windows-2022: the Rust toolchain and MSVC both support Arm64 hosts,
+        # and a native runner lets the gate and the SDK tests run the arm64 worker, which a cross
+        # build could not. To cross-compile instead, use
+        #   { rid: win-arm64, os: windows-2022, target: aarch64-pc-windows-msvc, msvc-arch: amd64_arm64 }
+        #
+        # Linux builds run in a Debian bookworm container (glibc 2.36, like docker/Dockerfile.linux)
+        # so the worker also runs on older distributions than the runner's Ubuntu 24.04.
+        include:
+          - { rid: linux-x64,   os: ubuntu-latest,    container: 'rust:1.95-bookworm', target: '', exe: '' }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm, container: 'rust:1.95-bookworm', target: '', exe: '' }
+          - { rid: osx-arm64,   os: macos-14,         container: '', target: '', exe: '' }
+          - { rid: osx-x64,     os: macos-15-intel,   container: '', target: '', exe: '' }
+          - { rid: win-x64,     os: windows-2022,     container: '', target: '', exe: '.exe', msvc-arch: x64 }
+          - { rid: win-arm64,   os: windows-11-arm,   container: '', target: '', exe: '.exe', msvc-arch: arm64 }
+    container: ${{ matrix.container }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Keep LF line endings (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+          git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+
+      # In the Linux container the workspace belongs to another user; without this git refuses
+      # to report the commit recorded in build-metadata.json.
+      - name: Trust the workspace (Linux container)
+        if: matrix.container != ''
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Read WordCraft version
+        id: wc
+        run: echo "version=$(tr -d '[:space:]' < WORDCRAFT_VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust ${{ env.RUST_TOOLCHAIN }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+
+      - name: Cache WordCraft and craft-fonts sources
+        id: sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            wc-src
+            craft-fonts-src
+          key: wc-sources-${{ runner.os }}-${{ steps.wc.outputs.version }}-${{ hashFiles('patches/**') }}
+
+      # build.sh clones these too; fetching them first gives rust-cache a complete workspace
+      # (Cargo.toml has path dependencies into wc-src/) and WordCraft's Cargo.lock to hash.
+      - name: Fetch WordCraft ${{ steps.wc.outputs.version }}
+        run: |
+          if [ ! -e wc-src/.git ]; then
+            git clone --depth 1 --branch "${{ steps.wc.outputs.version }}" \
+              https://github.com/storytold/wordcraft.git wc-src
+          fi
+          cp wc-src/Cargo.lock Cargo.lock
+
+      - name: Cache Cargo registry and target/
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.rid }}-${{ hashFiles('WORDCRAFT_VERSION', 'Cargo.toml') }}
+          # Only main writes caches; pull requests and tags restore main's.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: bash scripts/build.sh
+
+      - name: Install gate tools (Linux container)
+        if: matrix.container != '' && matrix.target == ''
+        run: apt-get update && apt-get install -y --no-install-recommends python3
+
+      - uses: actions/setup-python@v5
+        if: matrix.container == '' && matrix.target == ''
+        with:
+          python-version: "3.12"
+
+      # After the build on purpose: MSVC's environment would put Git Bash's /usr/bin/link.exe
+      # ahead of MSVC's linker for cargo. The gate only needs cl.exe (tests/test.sh) and dumpbin.
+      - name: Set up MSVC environment (Windows)
+        if: runner.os == 'Windows' && matrix.target == ''
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc-arch }}
+
+      - name: Gate
+        if: matrix.target == ''
+        env:
+          PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+          GATE_STRICT_METADATA: "1"
+          GATE_ITERATIONS: "5"
+          # The SDK suites run in their own jobs below, against the uploaded artifacts.
+          GATE_ENABLE_DOTNET: "0"
+          GATE_ENABLE_JAVA: "0"
+        run: GATE_REPORT_DIR="$PWD/gate-report" bash scripts/run-gate.sh "$PWD/output"
+
+      - name: Upload gate report
+        if: always() && matrix.target == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-report-${{ matrix.rid }}
+          path: gate-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload native-${{ matrix.rid }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: output/
+          if-no-files-found: error
+          retention-days: 30
+
+  linux-docker:
+    name: Linux Docker image (linux-x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # Builds docker/Dockerfile.linux, extracts its artifacts and runs the gate inside the
+      # runtime-like image; checks the published container image path, not only the binaries.
+      - name: Build and validate
+        env:
+          PLATFORM: linux/amd64
+          GATE_ITERATIONS: "5"
+        run: bash scripts/linux-docker-validate.sh
+
+  dotnet:
+    name: .NET tests (${{ matrix.rid }})
+    needs: native
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64,   os: ubuntu-latest,    exe: '' }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm, exe: '' }
+          - { rid: osx-arm64,   os: macos-14,         exe: '' }
+          - { rid: osx-x64,     os: macos-15-intel,   exe: '' }
+          - { rid: win-x64,     os: windows-2022,     exe: '.exe' }
+          - { rid: win-arm64,   os: windows-11-arm,   exe: '.exe' }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: output
+
+      - name: Locate worker
+        run: |
+          # Artifacts do not keep file modes.
+          chmod +x "output/bin/wcpdf_worker${{ matrix.exe }}"
+          echo "WCPDF_WORKER_PATH=${{ github.workspace }}/output/bin/wcpdf_worker${{ matrix.exe }}" >> "$GITHUB_ENV"
+          echo "WCPDF_NATIVE_DIR=${{ github.workspace }}/output" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          # The tests target net8.0 and net10.0.
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: dotnet test
+        run: dotnet test dotnet/WordCraftPdf.sln -c Release --nologo --verbosity minimal
+
+  java:
+    name: Java tests (${{ matrix.rid }})
+    needs: native
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64,   os: ubuntu-latest,    exe: '' }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm, exe: '' }
+          - { rid: osx-arm64,   os: macos-14,         exe: '' }
+          - { rid: osx-x64,     os: macos-15-intel,   exe: '' }
+          - { rid: win-x64,     os: windows-2022,     exe: '.exe' }
+          - { rid: win-arm64,   os: windows-11-arm,   exe: '.exe' }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: output
+
+      - name: Locate worker
+        run: |
+          # Artifacts do not keep file modes.
+          chmod +x "output/bin/wcpdf_worker${{ matrix.exe }}"
+          echo "WCPDF_WORKER_PATH=${{ github.workspace }}/output/bin/wcpdf_worker${{ matrix.exe }}" >> "$GITHUB_ENV"
+          echo "WCPDF_NATIVE_DIR=${{ github.workspace }}/output" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Ensure Maven is available
+        run: |
+          if command -v mvn >/dev/null 2>&1; then mvn -v; exit 0; fi
+          # Not every runner image ships Maven (e.g. Windows Arm64).
+          v=3.9.11
+          curl -fsSL -o "$RUNNER_TEMP/maven.zip" \
+            "https://archive.apache.org/dist/maven/maven-3/$v/binaries/apache-maven-$v-bin.zip"
+          unzip -q "$RUNNER_TEMP/maven.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-$v/bin" >> "$GITHUB_PATH"
+
+      - name: mvn verify
+        run: |
+          mvn -B -ntp -f java/pom.xml verify \
+            "-Dwcpdf.worker.path=$WCPDF_WORKER_PATH" "-Dwcpdf.native.dir=$WCPDF_NATIVE_DIR"

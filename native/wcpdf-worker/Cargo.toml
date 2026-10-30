@@ -1,0 +1,26 @@
+[package]
+name = "wcpdf-worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "WordCraftPdf out-of-process worker (length-prefixed JSON over stdin/stdout)"
+
+[[bin]]
+name = "wcpdf_worker"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[features]
+default = ["mimalloc"]
+# mimalloc as the global allocator: layout and PDF writing allocate heavily.
+mimalloc = ["dep:mimalloc"]
+
+[dependencies]
+mimalloc = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wcpdf-core = { workspace = true }

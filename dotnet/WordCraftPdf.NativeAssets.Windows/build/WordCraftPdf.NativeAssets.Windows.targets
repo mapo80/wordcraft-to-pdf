@@ -1,0 +1,23 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    .NET (Core) apps get runtimes/<rid>/native/wcpdf_worker.exe from NuGet automatically.
+    .NET Framework apps (WordCraftPdf's netstandard2.0 build) don't, so copy the worker for the
+    target architecture next to the application, where WordCraftPdf looks for it.
+  -->
+  <PropertyGroup>
+    <_WcpdfRid_Windows Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_WcpdfRid_Windows>
+    <_WcpdfRid_Windows Condition="'$(_WcpdfRid_Windows)' == '' and '$(PlatformTarget)' == 'ARM64'">win-arm64</_WcpdfRid_Windows>
+    <_WcpdfRid_Windows Condition="'$(_WcpdfRid_Windows)' == ''">win-x64</_WcpdfRid_Windows>
+    <_WcpdfWorker_Windows>$(MSBuildThisFileDirectory)../runtimes/$(_WcpdfRid_Windows)/native/wcpdf_worker.exe</_WcpdfWorker_Windows>
+  </PropertyGroup>
+
+  <Target Name="_WordCraftPdfCopyWorker_Windows" AfterTargets="Build"
+          Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework' and Exists('$(_WcpdfWorker_Windows)')">
+    <Copy SourceFiles="$(_WcpdfWorker_Windows)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="_WordCraftPdfPublishWorker_Windows" AfterTargets="Publish"
+          Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework' and Exists('$(_WcpdfWorker_Windows)')">
+    <Copy SourceFiles="$(_WcpdfWorker_Windows)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Manual smoke/benchmark tool. Uses the worker found by the normal search
+       (WCPDF_WORKER_PATH, NativeAssets layout, or output/bin/ of this checkout). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WordCraftPdf\WordCraftPdf.csproj" />
+  </ItemGroup>
+</Project>

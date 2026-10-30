@@ -1,0 +1,52 @@
+[workspace]
+resolver = "3"
+members = ["native/wcpdf-core", "native/wcpdf-capi", "native/wcpdf-worker"]
+# The WordCraft checkout is its own workspace (cloned by scripts/build.sh).
+exclude = ["wc-src"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MPL-2.0"
+
+[workspace.dependencies]
+wcpdf-core = { path = "native/wcpdf-core" }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+mimalloc = { version = "0.1", default-features = false }
+
+# WordCraft, built from source: scripts/build.sh clones the tag in WORDCRAFT_VERSION into
+# wc-src/ (or links WC_SRC_DIR there) and copies its Cargo.lock here, so the engine builds with
+# the dependency versions WordCraft itself tested.
+wordcraft-doc = { path = "wc-src/crates/doc" }
+wordcraft-engine = { path = "wc-src/crates/engine" }
+wordcraft-fonts = { path = "wc-src/crates/fonts" }
+wordcraft-layout = { path = "wc-src/crates/layout" }
+wordcraft-pdf = { path = "wc-src/crates/pdf" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.release]
+opt-level = 3
+# Whole-program optimisation: slower builds, faster conversions.
+lto = "fat"
+codegen-units = 1
+debug = 0
+strip = true
+# Unwinding stays on: the core turns an engine panic into an error instead of a dead process.
+panic = "unwind"
+
+# WordCraft's PDF writer requires its patched Krilla (craft-pdf checks a backend marker at compile
+# time). Patches in a dependency's workspace don't apply here, so it is repeated. scripts/build.sh
+# fails if it differs from wc-src/Cargo.toml; scripts/bump-wordcraft-version.sh keeps it in step.
+[patch.crates-io]
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }

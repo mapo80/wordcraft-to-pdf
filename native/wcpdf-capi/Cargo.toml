@@ -1,0 +1,20 @@
+[package]
+name = "wcpdf-capi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "WordCraftPdf C API (libwcpdf)"
+
+[lib]
+name = "wcpdf"
+crate-type = ["cdylib", "staticlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+libc = { workspace = true }
+serde_json = { workspace = true }
+wcpdf-core = { workspace = true }

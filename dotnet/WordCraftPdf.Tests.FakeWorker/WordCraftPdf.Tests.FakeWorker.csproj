@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A stand-in for wcpdf_worker that speaks the same protocol (docs/protocol.md) and crashes,
+       hangs, fails or misbehaves on command, so the pool can be tested deterministically. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TieredPGO>false</TieredPGO>
+  </PropertyGroup>
+
+</Project>

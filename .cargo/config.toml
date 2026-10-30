@@ -1,0 +1,4 @@
+# Windows: link the C runtime statically, so the worker and wcpdf.dll run without the
+# Visual C++ redistributable installed.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

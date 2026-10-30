@@ -1,0 +1,7 @@
+# Scripts run under bash on every platform, Git Bash included: keep LF endings.
+*.sh text eol=lf
+*.py text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.docx binary
+*.ttf binary

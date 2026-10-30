@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WordCraftPdf\WordCraftPdf.csproj" />
+    <!-- The fake worker is built and copied next to the tests (apphost + dll). -->
+    <ProjectReference Include="..\WordCraftPdf.Tests.FakeWorker\WordCraftPdf.Tests.FakeWorker.csproj" />
+  </ItemGroup>
+
+</Project>

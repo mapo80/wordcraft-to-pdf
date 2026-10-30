@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Packaging-only project: no code, just the native worker -->
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <NoBuild>true</NoBuild>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+
+    <!-- NuGet metadata -->
+    <PackageId>WordCraftPdf.NativeAssets.Linux</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>mapo80</Authors>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/mapo80/wordcraft-to-pdf</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/mapo80/wordcraft-to-pdf</PackageProjectUrl>
+    <Description>Native Linux worker for WordCraftPdf: wcpdf_worker, the out-of-process WordCraft (pure Rust) conversion engine, for linux-x64 and linux-arm64 (glibc).</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageTags>pdf;conversion;docx;wordcraft;native;linux</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <NoWarn>$(NoWarn);NU5128;NU5100</NoWarn>
+  </PropertyGroup>
+
+  <!-- Input directories: scripts/build.sh output folders, each with bin/wcpdf_worker and licenses/
+       (override via -p:NativeDir_x64=path/ -p:NativeDir_arm64=path/; scripts/pack-nuget.sh does) -->
+  <PropertyGroup>
+    <NativeDir_x64 Condition="'$(NativeDir_x64)' == ''">../../output-linux-x64/</NativeDir_x64>
+    <NativeDir_arm64 Condition="'$(NativeDir_arm64)' == ''">../../output-linux-arm64/</NativeDir_arm64>
+    <NativeDir_x64 Condition="!HasTrailingSlash('$(NativeDir_x64)')">$(NativeDir_x64)/</NativeDir_x64>
+    <NativeDir_arm64 Condition="!HasTrailingSlash('$(NativeDir_arm64)')">$(NativeDir_arm64)/</NativeDir_arm64>
+    <_WcpdfLicenses Condition="Exists('$(NativeDir_x64)licenses')">$(NativeDir_x64)licenses/</_WcpdfLicenses>
+    <_WcpdfLicenses Condition="'$(_WcpdfLicenses)' == '' and Exists('$(NativeDir_arm64)licenses')">$(NativeDir_arm64)licenses/</_WcpdfLicenses>
+  </PropertyGroup>
+
+  <!-- Standard NuGet native layout: the SDK copies runtimes/<rid>/native/ to the output
+       (flattened into the app directory for RID-specific builds). -->
+  <ItemGroup Condition="Exists('$(NativeDir_x64)bin/wcpdf_worker')">
+    <None Include="$(NativeDir_x64)bin/wcpdf_worker" Pack="true" PackagePath="runtimes/linux-x64/native/" />
+    <_WcpdfPackedWorker Include="linux-x64" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('$(NativeDir_arm64)bin/wcpdf_worker')">
+    <None Include="$(NativeDir_arm64)bin/wcpdf_worker" Pack="true" PackagePath="runtimes/linux-arm64/native/" />
+    <_WcpdfPackedWorker Include="linux-arm64" />
+  </ItemGroup>
+
+  <!-- Third-party licenses of the engine and bundled fonts (package root, not copied to apps) -->
+  <ItemGroup Condition="'$(_WcpdfLicenses)' != ''">
+    <None Include="$(_WcpdfLicenses)**" Pack="true" PackagePath="licenses/" />
+  </ItemGroup>
+
+  <!-- Ship MSBuild .targets so consumers get the execute bit restored -->
+  <ItemGroup>
+    <None Include="build/WordCraftPdf.NativeAssets.Linux.targets" Pack="true" PackagePath="build/" />
+    <None Include="buildTransitive/WordCraftPdf.NativeAssets.Linux.targets" Pack="true" PackagePath="buildTransitive/" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <Target Name="_WcpdfRequireWorker" BeforeTargets="GenerateNuspec">
+    <Error Condition="'@(_WcpdfPackedWorker)' == ''"
+           Text="No wcpdf_worker found in '$(NativeDir_x64)bin/' or '$(NativeDir_arm64)bin/'. Build it with scripts/build.sh, then pack with scripts/pack-nuget.sh." />
+    <Message Importance="high" Text="WordCraftPdf.NativeAssets.Linux: packing @(_WcpdfPackedWorker->'%(Identity)', ', ')" />
+  </Target>
+
+</Project>
